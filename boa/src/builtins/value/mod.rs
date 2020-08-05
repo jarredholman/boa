@@ -9,7 +9,7 @@ use crate::builtins::{
     function::Function,
     object::{GcObject, InternalState, InternalStateCell, Object, ObjectData, PROTOTYPE},
     property::{Attribute, Property, PropertyKey},
-    BigInt, Symbol,
+    BigInt,
 };
 use crate::exec::Interpreter;
 use crate::BoaProfiler;
@@ -149,8 +149,8 @@ impl Value {
 
     /// Creates a new symbol value.
     #[inline]
-    pub(crate) fn symbol(symbol: Symbol) -> Self {
-        Self::Symbol(RcSymbol::from(symbol))
+    pub fn symbol(symbol: RcSymbol) -> Self {
+        Self::Symbol(symbol)
     }
 
     /// Returns a new empty object
