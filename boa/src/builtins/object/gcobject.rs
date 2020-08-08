@@ -52,6 +52,10 @@ impl GcObject {
         std::ptr::eq(lhs.as_ref(), rhs.as_ref())
     }
 
+    /// This will handle calls for both ordinary and built-in functions
+    ///
+    /// <https://tc39.es/ecma262/#sec-prepareforordinarycall>
+    /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects-call-thisargument-argumentslist>
     pub fn call(&self, this: &Value, args: &[Value], ctx: &mut Interpreter) -> ResultValue {
         let this_function_object = self.clone();
         let object = self.borrow();
