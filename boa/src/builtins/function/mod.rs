@@ -343,7 +343,7 @@ impl Function {
     }
 
     // Adds the final rest parameters to the Environment as an array
-    fn add_rest_param(
+    pub(crate) fn add_rest_param(
         &self,
         param: &FormalParameter,
         index: usize,
@@ -367,7 +367,7 @@ impl Function {
     }
 
     // Adds an argument to the environment
-    fn add_arguments_to_environment(
+    pub(crate) fn add_arguments_to_environment(
         &self,
         param: &FormalParameter,
         value: Value,

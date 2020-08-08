@@ -179,20 +179,9 @@ impl Interpreter {
     }
 
     /// <https://tc39.es/ecma262/#sec-call>
-    pub(crate) fn call(
-        &mut self,
-        f: &Value,
-        this: &Value,
-        arguments_list: &[Value],
-    ) -> ResultValue {
+    pub(crate) fn call(&mut self, f: &Value, this: &Value, args: &[Value]) -> ResultValue {
         match *f {
-            Value::Object(ref obj) => {
-                let obj = obj.borrow();
-                if let ObjectData::Function(ref func) = obj.data {
-                    return func.call(f.clone(), this, arguments_list, self);
-                }
-                self.throw_type_error("not a function")
-            }
+            Value::Object(ref object) => object.call(this, args, self),
             _ => self.throw_type_error("not a function"),
         }
     }
