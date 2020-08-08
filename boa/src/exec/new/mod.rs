@@ -1,7 +1,7 @@
 use super::{Executable, Interpreter};
 use crate::{
     builtins::{
-        object::{ObjectData, PROTOTYPE},
+        object::PROTOTYPE,
         value::{ResultValue, Value},
     },
     syntax::ast::node::New,
@@ -28,13 +28,7 @@ impl Executable for New {
             .set_prototype(func_object.get_field(PROTOTYPE));
 
         match func_object {
-            Value::Object(ref obj) => {
-                let obj = obj.borrow();
-                if let ObjectData::Function(ref func) = obj.data {
-                    return func.construct(func_object.clone(), &this, &v_args, interpreter);
-                }
-                interpreter.throw_type_error("not a constructor")
-            }
+            Value::Object(ref object) => object.construct(&this, &v_args, interpreter),
             _ => Ok(Value::undefined()),
         }
     }

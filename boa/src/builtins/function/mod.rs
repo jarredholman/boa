@@ -18,9 +18,8 @@ use crate::{
         value::{RcString, ResultValue, Value},
         Array,
     },
-    environment::function_environment_record::BindingStatus,
-    environment::lexical_environment::{new_function_environment, Environment},
-    exec::{Executable, Interpreter},
+    environment::lexical_environment::Environment,
+    exec::Interpreter,
     syntax::ast::node::{FormalParameter, StatementList},
     BoaProfiler,
 };
@@ -204,72 +203,6 @@ impl Function {
             false,
             true,
         )
-    }
-
-    /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects-construct-argumentslist-newtarget>
-    pub fn construct(
-        &self,
-        function: Value, // represents a pointer to this function object wrapped in a GC (not a `this` JS object)
-        this: &Value,
-        args_list: &[Value],
-        interpreter: &mut Interpreter,
-    ) -> ResultValue {
-        if self.flags.is_constructable() {
-            match self.body {
-                FunctionBody::BuiltIn(func) => {
-                    func(this, args_list, interpreter)?;
-                    Ok(this.clone())
-                }
-                FunctionBody::Ordinary(ref body) => {
-                    // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
-                    // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
-                    let local_env = new_function_environment(
-                        function,
-                        Some(this.clone()),
-                        self.environment.as_ref().cloned(),
-                        // Arrow functions do not have a this binding https://tc39.es/ecma262/#sec-function-environment-records
-                        if let ThisMode::Lexical = self.this_mode {
-                            BindingStatus::Lexical
-                        } else {
-                            BindingStatus::Uninitialized
-                        },
-                    );
-
-                    // Add argument bindings to the function environment
-                    for (i, param) in self.params.iter().enumerate() {
-                        // Rest Parameters
-                        if param.is_rest_param() {
-                            self.add_rest_param(param, i, args_list, interpreter, &local_env);
-                            break;
-                        }
-
-                        let value = args_list.get(i).cloned().unwrap_or_else(Value::undefined);
-                        self.add_arguments_to_environment(param, value, &local_env);
-                    }
-
-                    // Add arguments object
-                    let arguments_obj = create_unmapped_arguments_object(args_list);
-                    local_env
-                        .borrow_mut()
-                        .create_mutable_binding("arguments".to_string(), false);
-                    local_env
-                        .borrow_mut()
-                        .initialize_binding("arguments", arguments_obj);
-
-                    interpreter.realm.environment.push(local_env);
-
-                    // Call body should be set before reaching here
-                    let _ = body.run(interpreter);
-
-                    // local_env gets dropped here, its no longer needed
-                    let binding = interpreter.realm.environment.get_this_binding();
-                    Ok(binding)
-                }
-            }
-        } else {
-            let name = this.get_field("name").to_string();
-            panic!("TypeError: {} is not a constructor", name);
-        }
     }
 
     // Adds the final rest parameters to the Environment as an array

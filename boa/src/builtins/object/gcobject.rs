@@ -67,7 +67,7 @@ impl GcObject {
                         // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
                         // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
                         let local_env = new_function_environment(
-                            this_function_object.into(),
+                            this_function_object,
                             if let ThisMode::Lexical = function.this_mode {
                                 None
                             } else {
@@ -115,6 +115,72 @@ impl GcObject {
                 }
             } else {
                 ctx.throw_type_error("function object is not callable")
+            }
+        } else {
+            ctx.throw_type_error("not a function")
+        }
+    }
+
+    /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects-construct-argumentslist-newtarget>
+    pub fn construct(&self, this: &Value, args: &[Value], ctx: &mut Interpreter) -> ResultValue {
+        let this_function_object = self.clone();
+        let object = self.borrow();
+        if let Some(function) = object.as_function() {
+            if function.is_constructable() {
+                match function.body {
+                    FunctionBody::BuiltIn(func) => {
+                        func(this, args, ctx)?;
+                        Ok(this.clone())
+                    }
+                    FunctionBody::Ordinary(ref body) => {
+                        // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
+                        // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
+                        let local_env = new_function_environment(
+                            this_function_object,
+                            Some(this.clone()),
+                            function.environment.clone(),
+                            // Arrow functions do not have a this binding https://tc39.es/ecma262/#sec-function-environment-records
+                            if let ThisMode::Lexical = function.this_mode {
+                                BindingStatus::Lexical
+                            } else {
+                                BindingStatus::Uninitialized
+                            },
+                        );
+
+                        // Add argument bindings to the function environment
+                        for (i, param) in function.params.iter().enumerate() {
+                            // Rest Parameters
+                            if param.is_rest_param() {
+                                function.add_rest_param(param, i, args, ctx, &local_env);
+                                break;
+                            }
+
+                            let value = args.get(i).cloned().unwrap_or_else(Value::undefined);
+                            function.add_arguments_to_environment(param, value, &local_env);
+                        }
+
+                        // Add arguments object
+                        let arguments_obj = create_unmapped_arguments_object(args);
+                        local_env
+                            .borrow_mut()
+                            .create_mutable_binding("arguments".to_string(), false);
+                        local_env
+                            .borrow_mut()
+                            .initialize_binding("arguments", arguments_obj);
+
+                        ctx.realm.environment.push(local_env);
+
+                        // Call body should be set before reaching here
+                        let _ = body.run(ctx);
+
+                        // local_env gets dropped here, its no longer needed
+                        let binding = ctx.realm.environment.get_this_binding();
+                        Ok(binding)
+                    }
+                }
+            } else {
+                let name = this.get_field("name").to_string();
+                ctx.throw_type_error(format!("{} is not a constructor", name))
             }
         } else {
             ctx.throw_type_error("not a function")
