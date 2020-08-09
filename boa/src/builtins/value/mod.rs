@@ -10,7 +10,6 @@ pub mod val_type;
 pub use crate::builtins::value::val_type::Type;
 
 use crate::builtins::{
-    function::Function,
     object::{GcObject, InternalState, InternalStateCell, Object, ObjectData, PROTOTYPE},
     property::{Attribute, Property, PropertyKey},
     BigInt, Symbol,
@@ -691,20 +690,6 @@ impl Value {
         if let Some(mut object) = self.as_object_mut() {
             object.state_mut().replace(InternalStateCell::new(state));
         }
-    }
-
-    /// Consume the function and return a Value
-    pub fn from_func(function: Function) -> Value {
-        // Get Length
-        let length = function.params.len();
-        // Object with Kind set to function
-        // TODO: FIXME: Add function prototype
-        let new_func = Object::function(function, Value::null());
-        // Wrap Object in GC'd Value
-        let new_func_val = Value::from(new_func);
-        // Set length to parameters
-        new_func_val.set_field("length", Value::from(length));
-        new_func_val
     }
 }
 

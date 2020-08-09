@@ -6,7 +6,8 @@
 
 use crate::{
     builtins::{
-        function::{Function, NativeFunctionData},
+        function::{Function, FunctionFlags, NativeFunctionData},
+        object::Object,
         value::Value,
     },
     environment::{
@@ -52,8 +53,23 @@ impl Realm {
 
     /// Utility to add a function to the global object
     pub fn register_global_func(self, func_name: &str, func: NativeFunctionData) -> Self {
-        let func = Function::builtin(Vec::new(), func);
-        self.global_obj.set_field(func_name, Value::from_func(func));
+        // TODO: Removed this.
+        fn from_func(function: Function) -> Value {
+            // Get Length
+            // FIXME: the length should be passes in
+            let length = 0;
+            // Object with Kind set to function
+            // TODO: FIXME: Add function prototype
+            let new_func = Object::function(function, Value::null());
+            // Wrap Object in GC'd Value
+            let new_func_val = Value::from(new_func);
+            // Set length to parameters
+            new_func_val.set_field("length", Value::from(length));
+            new_func_val
+        }
+
+        let func = Function::builtin(func, FunctionFlags::CALLABLE | FunctionFlags::CONSTRUCTABLE);
+        self.global_obj.set_field(func_name, from_func(func));
 
         self
     }

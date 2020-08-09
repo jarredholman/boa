@@ -25,7 +25,7 @@ mod try_node;
 use crate::{
     builtins,
     builtins::{
-        function::{Function as FunctionObject, FunctionBody, ThisMode},
+        function::{Function, FunctionFlags},
         number::{f64_to_int32, f64_to_uint32},
         object::{Object, ObjectData, PROTOTYPE},
         property::PropertyKey,
@@ -134,40 +134,25 @@ impl Interpreter {
         &mut self,
         params: P,
         body: B,
-        this_mode: ThisMode,
-        constructable: bool,
-        callable: bool,
+        flags: FunctionFlags,
     ) -> Value
     where
         P: Into<Box<[FormalParameter]>>,
         B: Into<StatementList>,
     {
-        let function_prototype = self
-            .realm
-            .environment
-            .get_global_object()
-            .expect("Could not get the global object")
-            .get_field("Function")
-            .get_field(PROTOTYPE);
+        let function_prototype = self.global().get_field("Function").get_field(PROTOTYPE);
 
         // Every new function has a prototype property pre-made
-        let global_val = &self
-            .realm
-            .environment
-            .get_global_object()
-            .expect("Could not get the global object");
-        let proto = Value::new_object(Some(global_val));
+        let proto = Value::new_object(Some(self.global()));
 
         let params = params.into();
         let params_len = params.len();
-        let func = FunctionObject::new(
+        let func = Function::Ordinary {
+            flags,
+            body: body.into(),
             params,
-            Some(self.realm.environment.get_current_environment().clone()),
-            FunctionBody::Ordinary(body.into()),
-            this_mode,
-            constructable,
-            callable,
-        );
+            environment: self.realm.environment.get_current_environment().clone(),
+        };
 
         let new_func = Object::function(func, function_prototype);
 

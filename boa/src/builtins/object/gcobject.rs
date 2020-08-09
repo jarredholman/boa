@@ -5,7 +5,7 @@
 use super::Object;
 use crate::{
     builtins::{
-        function::{create_unmapped_arguments_object, FunctionBody, ThisMode},
+        function::{create_unmapped_arguments_object, Function, NativeFunction},
         ResultValue, Value,
     },
     environment::{
@@ -61,21 +61,26 @@ impl GcObject {
         let object = self.borrow();
         if let Some(function) = object.as_function() {
             if function.is_callable() {
-                match function.body {
-                    FunctionBody::BuiltIn(func) => func(this, args, ctx),
-                    FunctionBody::Ordinary(ref body) => {
+                match function {
+                    Function::BuiltIn(NativeFunction(function), _) => function(this, args, ctx),
+                    Function::Ordinary {
+                        body,
+                        params,
+                        environment,
+                        flags,
+                    } => {
                         // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
                         // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
                         let local_env = new_function_environment(
                             this_function_object,
-                            if let ThisMode::Lexical = function.this_mode {
+                            if flags.is_lexical_this_mode() {
                                 None
                             } else {
                                 Some(this.clone())
                             },
-                            function.environment.clone(),
+                            Some(environment.clone()),
                             // Arrow functions do not have a this binding https://tc39.es/ecma262/#sec-function-environment-records
-                            if let ThisMode::Lexical = function.this_mode {
+                            if flags.is_lexical_this_mode() {
                                 BindingStatus::Lexical
                             } else {
                                 BindingStatus::Uninitialized
@@ -83,7 +88,7 @@ impl GcObject {
                         );
 
                         // Add argument bindings to the function environment
-                        for (i, param) in function.params.iter().enumerate() {
+                        for (i, param) in params.iter().enumerate() {
                             // Rest Parameters
                             if param.is_rest_param() {
                                 function.add_rest_param(param, i, args, ctx, &local_env);
@@ -127,20 +132,25 @@ impl GcObject {
         let object = self.borrow();
         if let Some(function) = object.as_function() {
             if function.is_constructable() {
-                match function.body {
-                    FunctionBody::BuiltIn(func) => {
-                        func(this, args, ctx)?;
+                match function {
+                    Function::BuiltIn(NativeFunction(function), _) => {
+                        function(this, args, ctx)?;
                         Ok(this.clone())
                     }
-                    FunctionBody::Ordinary(ref body) => {
+                    Function::Ordinary {
+                        body,
+                        params,
+                        environment,
+                        flags,
+                    } => {
                         // Create a new Function environment who's parent is set to the scope of the function declaration (self.environment)
                         // <https://tc39.es/ecma262/#sec-prepareforordinarycall>
                         let local_env = new_function_environment(
                             this_function_object,
                             Some(this.clone()),
-                            function.environment.clone(),
+                            Some(environment.clone()),
                             // Arrow functions do not have a this binding https://tc39.es/ecma262/#sec-function-environment-records
-                            if let ThisMode::Lexical = function.this_mode {
+                            if flags.is_lexical_this_mode() {
                                 BindingStatus::Lexical
                             } else {
                                 BindingStatus::Uninitialized
@@ -148,7 +158,7 @@ impl GcObject {
                         );
 
                         // Add argument bindings to the function environment
-                        for (i, param) in function.params.iter().enumerate() {
+                        for (i, param) in params.iter().enumerate() {
                             // Rest Parameters
                             if param.is_rest_param() {
                                 function.add_rest_param(param, i, args, ctx, &local_env);

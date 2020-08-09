@@ -3,7 +3,7 @@
 use super::{Executable, Interpreter};
 use crate::{
     builtins::{
-        function::ThisMode,
+        function::FunctionFlags,
         value::{ResultValue, Value},
     },
     environment::lexical_environment::VariableScope,
@@ -19,9 +19,7 @@ impl Executable for FunctionDecl {
         let val = interpreter.create_function(
             self.parameters().to_vec(),
             self.body().to_vec(),
-            ThisMode::NonLexical,
-            true,
-            true,
+            FunctionFlags::CALLABLE | FunctionFlags::CONSTRUCTABLE,
         );
 
         // Set the name and assign it in the current environment
@@ -46,9 +44,7 @@ impl Executable for FunctionExpr {
         let val = interpreter.create_function(
             self.parameters().to_vec(),
             self.body().to_vec(),
-            ThisMode::NonLexical,
-            true,
-            true,
+            FunctionFlags::CALLABLE | FunctionFlags::CONSTRUCTABLE,
         );
 
         if let Some(name) = self.name() {
@@ -130,9 +126,9 @@ impl Executable for ArrowFunctionDecl {
         Ok(interpreter.create_function(
             self.params().to_vec(),
             self.body().to_vec(),
-            ThisMode::Lexical,
-            false,
-            true,
+            FunctionFlags::CALLABLE
+                | FunctionFlags::CONSTRUCTABLE
+                | FunctionFlags::LEXICAL_THIS_MODE,
         ))
     }
 }
