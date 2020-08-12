@@ -510,13 +510,21 @@ impl Interpreter {
     /// https://tc39.es/ecma262/#sec-topropertykey
     #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_property_key(&mut self, value: &Value) -> Result<PropertyKey, Value> {
-        let key = self.to_primitive(value, PreferredType::String)?;
-        if let Value::Symbol(ref symbol) = key {
-            Ok(PropertyKey::from(symbol.clone()))
-        } else {
-            let string = self.to_string(&key)?;
-            Ok(PropertyKey::from(string))
-        }
+        Ok(match *value {
+            // Fast path:
+            Value::Integer(integer) => integer.into(),
+            Value::Rational(rational) => rational.into(),
+            Value::String(ref string) => string.clone().into(),
+            Value::Symbol(ref symbol) => symbol.clone().into(),
+            // Slow path:
+            _ => match self.to_primitive(value, PreferredType::String)? {
+                Value::Integer(integer) => integer.into(),
+                Value::Rational(rational) => rational.into(),
+                Value::String(ref string) => string.clone().into(),
+                Value::Symbol(ref symbol) => symbol.clone().into(),
+                primitive => self.to_string(&primitive)?.into(),
+            },
+        })
     }
 
     /// https://tc39.es/ecma262/#sec-hasproperty

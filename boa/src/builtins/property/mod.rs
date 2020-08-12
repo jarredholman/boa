@@ -449,6 +449,17 @@ impl From<i32> for PropertyKey {
     }
 }
 
+impl From<f64> for PropertyKey {
+    fn from(value: f64) -> Self {
+        use num_traits::cast::FromPrimitive;
+        if let Some(index) = u32::from_f64(value) {
+            return PropertyKey::Index(index);
+        }
+
+        PropertyKey::String(ryu_js::Buffer::new().format(value).into())
+    }
+}
+
 impl PartialEq<&str> for PropertyKey {
     fn eq(&self, other: &&str) -> bool {
         match self {
