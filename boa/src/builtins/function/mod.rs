@@ -28,50 +28,26 @@ use gc::{unsafe_empty_trace, Finalize, Trace};
 use std::fmt::{self, Debug};
 
 /// _fn(this, arguments, ctx) -> ResultValue_ - The signature of a built-in function
-pub type NativeFunctionData = fn(&Value, &[Value], &mut Interpreter) -> ResultValue;
+pub type NativeFunction = fn(&Value, &[Value], &mut Interpreter) -> ResultValue;
 
 #[derive(Clone, Copy, Finalize)]
-pub struct NativeFunction(pub NativeFunctionData);
+pub struct BuiltInFunction(pub(crate) NativeFunction);
 
-unsafe impl Trace for NativeFunction {
+unsafe impl Trace for BuiltInFunction {
     unsafe_empty_trace!();
 }
 
-impl From<NativeFunctionData> for NativeFunction {
-    fn from(function: NativeFunctionData) -> Self {
+impl From<NativeFunction> for BuiltInFunction {
+    fn from(function: NativeFunction) -> Self {
         Self(function)
     }
 }
 
-impl Debug for NativeFunction {
+impl Debug for BuiltInFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("[native]")
     }
 }
-
-// /// Sets the ConstructorKind
-// #[derive(Debug, Copy, Clone)]
-// pub enum ConstructorKind {
-//     Base,
-//     Derived,
-// }
-
-// #[derive(Debug, Clone, PartialEq, PartialOrd, Hash, Finalize, Trace)]
-// pub enum ThisMode {
-//     Lexical,
-//     NonLexical,
-// }
-
-// /// `Trace` implementation for `FunctionBody`.
-// ///
-// /// This is indeed safe, but we need to mark this as an empty trace because neither
-// // `NativeFunctionData` nor Node hold any GC'd objects, but Gc doesn't know that. So we need to
-// /// signal it manually. `rust-gc` does not have a `Trace` implementation for `fn(_, _, _)`.
-// ///
-// /// <https://github.com/Manishearth/rust-gc/blob/master/gc/src/trace.rs>
-// unsafe impl Trace for FunctionBody {
-//     unsafe_empty_trace!();
-// }
 
 bitflags! {
     #[derive(Finalize, Default)]
@@ -110,11 +86,6 @@ impl FunctionFlags {
     pub(crate) fn is_lexical_this_mode(&self) -> bool {
         self.contains(Self::LEXICAL_THIS_MODE)
     }
-
-    #[inline]
-    pub(crate) fn is_non_lexical_this_mode(&self) -> bool {
-        !self.contains(Self::LEXICAL_THIS_MODE)
-    }
 }
 
 unsafe impl Trace for FunctionFlags {
@@ -128,7 +99,7 @@ unsafe impl Trace for FunctionFlags {
 /// <https://tc39.es/ecma262/#sec-ecmascript-function-objects>
 #[derive(Debug, Clone, Finalize, Trace)]
 pub enum Function {
-    BuiltIn(NativeFunction, FunctionFlags),
+    BuiltIn(BuiltInFunction, FunctionFlags),
     Ordinary {
         flags: FunctionFlags,
         body: StatementList,
@@ -138,35 +109,6 @@ pub enum Function {
 }
 
 impl Function {
-    /// This will create an ordinary function object
-    ///
-    /// <https://tc39.es/ecma262/#sec-ordinaryfunctioncreate>
-    pub(crate) fn ordinary<P>(
-        params: P,
-        environment: Environment,
-        body: StatementList,
-        flags: FunctionFlags,
-    ) -> Self
-    where
-        P: Into<Box<[FormalParameter]>>,
-    {
-        Self::Ordinary {
-            body,
-            params: params.into(),
-            environment,
-            flags,
-        }
-    }
-
-    /// This will create a built-in function object
-    ///
-    /// <https://tc39.es/ecma262/#sec-createbuiltinfunction>
-    #[inline]
-    pub(crate) fn builtin(body: NativeFunctionData, flags: FunctionFlags) -> Self {
-        let _timer = BoaProfiler::global().start_event("function::builtin", "function");
-        Self::BuiltIn(body.into(), flags)
-    }
-
     // Adds the final rest parameters to the Environment as an array
     pub(crate) fn add_rest_param(
         &self,
@@ -259,8 +201,8 @@ pub fn create_unmapped_arguments_object(arguments_list: &[Value]) -> Value {
 ///
 // This gets called when a new Function() is created.
 pub fn make_function(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultValue {
-    this.set_data(ObjectData::Function(Function::builtin(
-        |_, _, _| Ok(Value::undefined()),
+    this.set_data(ObjectData::Function(Function::BuiltIn(
+        BuiltInFunction(|_, _, _| Ok(Value::undefined())),
         FunctionFlags::CALLABLE | FunctionFlags::CONSTRUCTABLE,
     )));
     Ok(this.clone())
@@ -273,7 +215,7 @@ pub fn make_function(this: &Value, _: &[Value], _: &mut Interpreter) -> ResultVa
 pub fn make_constructor_fn(
     name: &str,
     length: usize,
-    body: NativeFunctionData,
+    body: NativeFunction,
     global: &Value,
     prototype: Value,
     constructable: bool,
@@ -283,8 +225,8 @@ pub fn make_constructor_fn(
         BoaProfiler::global().start_event(&format!("make_constructor_fn: {}", name), "init");
 
     // Create the native function
-    let function = Function::builtin(
-        body,
+    let function = Function::BuiltIn(
+        body.into(),
         FunctionFlags::from_parameters(callable, constructable),
     );
 
@@ -339,7 +281,7 @@ pub fn make_constructor_fn(
 ///
 /// If no length is provided, the length will be set to 0.
 pub fn make_builtin_fn<N>(
-    function: NativeFunctionData,
+    function: NativeFunction,
     name: N,
     parent: &Value,
     length: usize,
@@ -351,7 +293,7 @@ pub fn make_builtin_fn<N>(
     let _timer = BoaProfiler::global().start_event(&format!("make_builtin_fn: {}", &name), "init");
 
     let mut function = Object::function(
-        Function::builtin(function, FunctionFlags::CALLABLE),
+        Function::BuiltIn(function.into(), FunctionFlags::CALLABLE),
         interpreter
             .global()
             .get_field("Function")

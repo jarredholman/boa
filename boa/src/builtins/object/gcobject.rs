@@ -5,7 +5,7 @@
 use super::Object;
 use crate::{
     builtins::{
-        function::{create_unmapped_arguments_object, Function, NativeFunction},
+        function::{create_unmapped_arguments_object, BuiltInFunction, Function},
         ResultValue, Value,
     },
     environment::{
@@ -62,7 +62,7 @@ impl GcObject {
         if let Some(function) = object.as_function() {
             if function.is_callable() {
                 match function {
-                    Function::BuiltIn(NativeFunction(function), _) => function(this, args, ctx),
+                    Function::BuiltIn(BuiltInFunction(function), _) => function(this, args, ctx),
                     Function::Ordinary {
                         body,
                         params,
@@ -133,7 +133,7 @@ impl GcObject {
         if let Some(function) = object.as_function() {
             if function.is_constructable() {
                 match function {
-                    Function::BuiltIn(NativeFunction(function), _) => {
+                    Function::BuiltIn(BuiltInFunction(function), _) => {
                         function(this, args, ctx)?;
                         Ok(this.clone())
                     }

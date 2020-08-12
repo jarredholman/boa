@@ -25,9 +25,9 @@ mod try_node;
 use crate::{
     builtins,
     builtins::{
-        function::{Function, FunctionFlags},
+        function::{Function, FunctionFlags, NativeFunction},
         number::{f64_to_int32, f64_to_uint32},
-        object::{Object, ObjectData, PROTOTYPE},
+        object::{GcObject, Object, ObjectData, PROTOTYPE},
         property::PropertyKey,
         value::{RcBigInt, RcString, ResultValue, Type, Value},
         BigInt, Console, Number,
@@ -162,6 +162,39 @@ impl Interpreter {
 
         val
     }
+
+    /// Utility to create a function Value for Function Declarations, Arrow Functions or Function Expressions
+    pub fn create_builtin_function(
+        &mut self,
+        name: &str,
+        length: usize,
+        body: NativeFunction,
+    ) -> GcObject {
+        let function_prototype = self.global().get_field("Function").get_field(PROTOTYPE);
+
+        // Every new function has a prototype property pre-made
+        let proto = Value::new_object(Some(self.global()));
+        let mut function = Object::function(
+            Function::BuiltIn(body.into(), FunctionFlags::CALLABLE),
+            function_prototype,
+        );
+        function.set(&PROTOTYPE.into(), proto);
+        function.set(&"length".into(), length.into());
+        function.set(&"name".into(), name.into());
+
+        GcObject::new(function)
+    }
+
+    pub fn register_global_function(&mut self, name: &str, length: usize, body: NativeFunction) {
+        let function = self.create_builtin_function(name, length, body);
+        self.global().set_field(name, function);
+    }
+
+    ///
+    /// context.register_global_builtin_function("sayHello", 0, || {
+    ///     
+    /// })
+    ///
 
     /// <https://tc39.es/ecma262/#sec-call>
     pub(crate) fn call(&mut self, f: &Value, this: &Value, args: &[Value]) -> ResultValue {

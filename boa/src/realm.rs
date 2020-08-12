@@ -5,11 +5,7 @@
 //! A realm is represented in this implementation as a Realm struct with the fields specified from the spec.
 
 use crate::{
-    builtins::{
-        function::{Function, FunctionFlags, NativeFunctionData},
-        object::Object,
-        value::Value,
-    },
+    builtins::value::Value,
     environment::{
         declarative_environment_record::DeclarativeEnvironmentRecord,
         global_environment_record::GlobalEnvironmentRecord,
@@ -49,29 +45,6 @@ impl Realm {
             global_env,
             environment: LexicalEnvironment::new(global),
         }
-    }
-
-    /// Utility to add a function to the global object
-    pub fn register_global_func(self, func_name: &str, func: NativeFunctionData) -> Self {
-        // TODO: Removed this.
-        fn from_func(function: Function) -> Value {
-            // Get Length
-            // FIXME: the length should be passes in
-            let length = 0;
-            // Object with Kind set to function
-            // TODO: FIXME: Add function prototype
-            let new_func = Object::function(function, Value::null());
-            // Wrap Object in GC'd Value
-            let new_func_val = Value::from(new_func);
-            // Set length to parameters
-            new_func_val.set_field("length", Value::from(length));
-            new_func_val
-        }
-
-        let func = Function::builtin(func, FunctionFlags::CALLABLE | FunctionFlags::CONSTRUCTABLE);
-        self.global_obj.set_field(func_name, from_func(func));
-
-        self
     }
 }
 

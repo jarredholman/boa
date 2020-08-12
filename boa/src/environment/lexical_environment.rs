@@ -162,11 +162,7 @@ impl LexicalEnvironment {
                     })
                     .expect("No function or global environment");
 
-                #[allow(clippy::let_and_return)]
-                // FIXME need to assign result to a variable to avoid borrow checker error
-                // (borrowed value `env` does not live long enough)
-                let b = env.borrow_mut().create_immutable_binding(name, deletion);
-                b
+                env.borrow_mut().create_immutable_binding(name, deletion)
             }
         }
     }
