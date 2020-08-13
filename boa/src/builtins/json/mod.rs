@@ -70,12 +70,13 @@ impl Json {
     ///
     /// [polyfill]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/parse
     fn walk(reviver: &Value, ctx: &mut Interpreter, holder: &mut Value, key: Value) -> ResultValue {
-        let mut value = holder.get_field(key.clone());
+        let value = holder.get_field(key.clone());
 
-        let obj = value.as_object().as_deref().cloned();
-        if let Some(obj) = obj {
-            for key in obj.properties().keys() {
-                let v = Self::walk(reviver, ctx, &mut value, Value::from(key.as_str()));
+        if let Value::Object(ref object) = value {
+            let keys: Vec<_> = object.borrow().properties().keys().cloned().collect();
+
+            for key in keys {
+                let v = Self::walk(reviver, ctx, &mut value.clone(), Value::from(key.as_str()));
                 match v {
                     Ok(v) if !v.is_undefined() => {
                         value.set_field(key.as_str(), v);

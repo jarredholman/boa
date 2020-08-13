@@ -49,6 +49,8 @@ pub use crate::{
     syntax::{lexer::Lexer, parser::Parser},
 };
 
+pub use gc::{custom_trace, unsafe_empty_trace, Finalize, Trace};
+
 fn parser_expr(src: &str) -> Result<StatementList, String> {
     let mut lexer = Lexer::new(src);
     lexer.lex().map_err(|e| format!("Syntax Error: {}", e))?;

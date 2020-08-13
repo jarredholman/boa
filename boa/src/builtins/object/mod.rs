@@ -26,6 +26,7 @@ use crate::{
 };
 use gc::{Finalize, Trace};
 use rustc_hash::FxHashMap;
+use std::any::Any;
 use std::fmt::{Debug, Display, Error, Formatter};
 
 use super::function::{make_builtin_fn, make_constructor_fn};
@@ -47,8 +48,23 @@ pub static PROTOTYPE: &str = "prototype";
 // /// Static `__proto__`, usually set on Object instances as a key to point to their respective prototype object.
 // pub static INSTANCE_PROTOTYPE: &str = "__proto__";
 
+pub trait NativeObject: Debug + Any + Trace {
+    fn as_any(&self) -> &dyn Any;
+    fn as_mut_any(&mut self) -> &mut dyn Any;
+}
+
+impl<T: Any + Debug + Trace> NativeObject for T {
+    fn as_any(&self) -> &dyn Any {
+        self as &dyn Any
+    }
+
+    fn as_mut_any(&mut self) -> &mut dyn Any {
+        self as &mut dyn Any
+    }
+}
+
 /// The internal representation of an JavaScript object.
-#[derive(Debug, Trace, Finalize, Clone)]
+#[derive(Debug, Trace, Finalize)]
 pub struct Object {
     /// The type of the object.
     pub data: ObjectData,
@@ -65,7 +81,7 @@ pub struct Object {
 }
 
 /// Defines the different types of objects.
-#[derive(Debug, Trace, Finalize, Clone)]
+#[derive(Debug, Trace, Finalize)]
 pub enum ObjectData {
     Array,
     Map(OrderedMap<Value, Value>),
@@ -80,6 +96,7 @@ pub enum ObjectData {
     Ordinary,
     Date(Date),
     Global,
+    NativeObject(Box<dyn NativeObject>),
 }
 
 impl Display for ObjectData {
@@ -101,6 +118,7 @@ impl Display for ObjectData {
                 Self::BigInt(_) => "BigInt",
                 Self::Date(_) => "Date",
                 Self::Global => "Global",
+                Self::NativeObject(_) => "NativeObject",
             }
         )
     }
@@ -205,21 +223,17 @@ impl Object {
         }
     }
 
-    /// Converts the `Value` to an `Object` type.
-    ///
-    /// More information:
-    ///  - [ECMAScript reference][spec]
-    ///
-    /// [spec]: https://tc39.es/ecma262/#sec-toobject
-    pub fn from(value: &Value) -> Result<Self, ()> {
-        match *value {
-            Value::Boolean(a) => Ok(Self::boolean(a)),
-            Value::Rational(a) => Ok(Self::number(a)),
-            Value::Integer(a) => Ok(Self::number(f64::from(a))),
-            Value::String(ref a) => Ok(Self::string(a.clone())),
-            Value::BigInt(ref bigint) => Ok(Self::bigint(bigint.clone())),
-            Value::Object(ref obj) => Ok(obj.borrow().clone()),
-            _ => Err(()),
+    pub fn native_object<T>(value: T) -> Self
+    where
+        T: NativeObject,
+    {
+        Self {
+            data: ObjectData::NativeObject(Box::new(value)),
+            properties: FxHashMap::default(),
+            symbol_properties: FxHashMap::default(),
+            prototype: Value::null(),
+            state: None,
+            extensible: true,
         }
     }
 
@@ -437,20 +451,56 @@ impl Object {
         assert!(prototype.is_null() || prototype.is_object());
         self.prototype = prototype
     }
+
+    pub fn is_native_object(&self) -> bool {
+        matches!(self.data, ObjectData::NativeObject(_))
+    }
+
+    pub fn is<T>(&self) -> bool
+    where
+        T: NativeObject,
+    {
+        use std::ops::Deref;
+        match self.data {
+            ObjectData::NativeObject(ref object) => object.deref().as_any().is::<T>(),
+            _ => false,
+        }
+    }
+
+    pub fn downcast_ref<T>(&self) -> Option<&T>
+    where
+        T: NativeObject,
+    {
+        use std::ops::Deref;
+        match self.data {
+            ObjectData::NativeObject(ref object) => object.deref().as_any().downcast_ref::<T>(),
+            _ => None,
+        }
+    }
+
+    pub fn downcast_mut<T>(&mut self) -> Option<&mut T>
+    where
+        T: NativeObject,
+    {
+        use std::ops::DerefMut;
+        match self.data {
+            ObjectData::NativeObject(ref mut object) => {
+                object.deref_mut().as_mut_any().downcast_mut::<T>()
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Create a new object.
 pub fn make_object(_: &Value, args: &[Value], ctx: &mut Interpreter) -> ResultValue {
     if let Some(arg) = args.get(0) {
         if !arg.is_null_or_undefined() {
-            return Ok(Value::object(Object::from(arg).unwrap()));
+            return ctx.to_object(arg);
         }
     }
-    let global = &ctx.realm.global_obj;
 
-    let object = Value::new_object(Some(global));
-
-    Ok(object)
+    Ok(Value::new_object(Some(ctx.global())))
 }
 
 /// `Object.create( proto, [propertiesObject] )`

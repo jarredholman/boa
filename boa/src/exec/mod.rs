@@ -115,7 +115,7 @@ impl Interpreter {
 
     /// Retrieves the global object of the `Realm` of this executor.
     #[inline]
-    pub(crate) fn global(&self) -> &Value {
+    pub fn global(&self) -> &Value {
         &self.realm.global_obj
     }
 
