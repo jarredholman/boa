@@ -30,22 +30,18 @@ use std::fmt::{Debug, Display, Error, Formatter};
 
 use super::function::{make_builtin_fn, make_constructor_fn};
 use crate::builtins::value::same_value;
-pub use internal_state::{InternalState, InternalStateCell};
 
-pub mod gcobject;
-pub mod internal_methods;
-mod internal_state;
+mod gcobject;
+mod internal_methods;
 
 pub use gcobject::GcObject;
+pub use internal_methods::*;
 
 #[cfg(test)]
 mod tests;
 
 /// Static `prototype`, usually set on constructors as a key to point to their respective prototype object.
 pub static PROTOTYPE: &str = "prototype";
-
-// /// Static `__proto__`, usually set on Object instances as a key to point to their respective prototype object.
-// pub static INSTANCE_PROTOTYPE: &str = "__proto__";
 
 /// The internal representation of an JavaScript object.
 #[derive(Debug, Trace, Finalize, Clone)]
@@ -58,8 +54,6 @@ pub struct Object {
     symbol_properties: FxHashMap<u32, Property>,
     /// Instance prototype `__proto__`.
     prototype: Value,
-    /// Some rust object that stores internal state
-    state: Option<InternalStateCell>,
     /// Whether it can have new properties added to it.
     extensible: bool,
 }
@@ -69,7 +63,7 @@ pub struct Object {
 pub enum ObjectData {
     Array,
     Map(OrderedMap<Value, Value>),
-    RegExp(RegExp),
+    RegExp(Box<RegExp>),
     BigInt(RcBigInt),
     Boolean(bool),
     Function(Function),
@@ -115,7 +109,6 @@ impl Default for Object {
             properties: FxHashMap::default(),
             symbol_properties: FxHashMap::default(),
             prototype: Value::null(),
-            state: None,
             extensible: true,
         }
     }
@@ -136,7 +129,6 @@ impl Object {
             properties: FxHashMap::default(),
             symbol_properties: FxHashMap::default(),
             prototype,
-            state: None,
             extensible: true,
         }
     }
@@ -161,7 +153,6 @@ impl Object {
             properties: FxHashMap::default(),
             symbol_properties: FxHashMap::default(),
             prototype: Value::null(),
-            state: None,
             extensible: true,
         }
     }
@@ -173,7 +164,6 @@ impl Object {
             properties: FxHashMap::default(),
             symbol_properties: FxHashMap::default(),
             prototype: Value::null(),
-            state: None,
             extensible: true,
         }
     }
@@ -188,7 +178,6 @@ impl Object {
             properties: FxHashMap::default(),
             symbol_properties: FxHashMap::default(),
             prototype: Value::null(),
-            state: None,
             extensible: true,
         }
     }
@@ -200,7 +189,6 @@ impl Object {
             properties: FxHashMap::default(),
             symbol_properties: FxHashMap::default(),
             prototype: Value::null(),
-            state: None,
             extensible: true,
         }
     }
@@ -417,16 +405,6 @@ impl Object {
     #[inline]
     pub fn symbol_properties_mut(&mut self) -> &mut FxHashMap<u32, Property> {
         &mut self.symbol_properties
-    }
-
-    #[inline]
-    pub fn state(&self) -> &Option<InternalStateCell> {
-        &self.state
-    }
-
-    #[inline]
-    pub fn state_mut(&mut self) -> &mut Option<InternalStateCell> {
-        &mut self.state
     }
 
     pub fn prototype(&self) -> &Value {
